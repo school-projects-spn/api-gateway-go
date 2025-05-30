@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"io"
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -15,31 +16,51 @@ const (
 
 func proxyRequest(c *gin.Context, targetURL string) {
 	var body []byte
+	var err error
+
 	if c.Request.Body != nil {
-		body, _ = io.ReadAll(c.Request.Body)
+		body, err = io.ReadAll(c.Request.Body)
+		if err != nil {
+			log.Printf("Error reading request body: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read request body"})
+			return
+		}
 	}
 
-	req, _ := http.NewRequest(c.Request.Method, targetURL+c.Request.URL.Path, bytes.NewBuffer(body))
+	req, err := http.NewRequest(c.Request.Method, targetURL+c.Request.URL.Path, bytes.NewBuffer(body))
+	if err != nil {
+		log.Printf("Error creating request: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create request"})
+		return
+	}
 
+	// Copy headers
 	for key, values := range c.Request.Header {
 		for _, value := range values {
 			req.Header.Add(key, value)
 		}
 	}
 
-	for key, values := range c.Request.URL.Query() {
-		for _, value := range values {
-			req.URL.Query().Add(key, value)
-		}
-	}
+	// Copy query parameters
 	req.URL.RawQuery = c.Request.URL.RawQuery
 
 	client := &http.Client{}
-	resp, _ := client.Do(req)
-	defer resp.Body.Close()
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("Error making request to %s: %v", targetURL, err)
+		c.JSON(http.StatusBadGateway, gin.H{"error": "Service unavailable"})
+		return
+	}
+	defer resp.Body.Close() // Now safe to defer since we checked for error
 
-	responseBody, _ := io.ReadAll(resp.Body)
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("Error reading response body: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read response"})
+		return
+	}
 
+	// Copy response headers
 	for key, values := range resp.Header {
 		for _, value := range values {
 			c.Header(key, value)
@@ -81,5 +102,6 @@ func main() {
 		})
 	})
 
+	log.Println("API Gateway starting on port 3000...")
 	r.Run(":3000")
 }
