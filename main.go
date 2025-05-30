@@ -9,8 +9,8 @@ import (
 )
 
 const (
-	STUDENT_SERVICE_URL = "http://localhost:3001"
-	TEACHER_SERVICE_URL = "http://localhost:3002"
+	STUDENT_SERVICE_URL = "http://54.86.184.199:3001"
+	TEACHER_SERVICE_URL = "http://54.152.81.100:3002"
 )
 
 func proxyRequest(c *gin.Context, targetURL string) {
